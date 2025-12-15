@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>String Art Generator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <h1>String Art Generator</h1>
+            <p>Turn your photos into beautiful thread masterpieces.</p>
+        </header>
+
+        <main>
+            <!-- Step 1: Upload -->
+            <section id="upload-step" class="step-container active">
+                <div class="upload-box" id="drop-zone">
+                    <div class="icon">📁</div>
+                    <h2>Upload your Image</h2>
+                    <p>Drag & drop or click to browse</p>
+                    <input type="file" id="file-input" accept="image/*" hidden>
+                </div>
+            </section>
+
+            <!-- Step 2: Crop -->
+            <section id="crop-step" class="step-container hidden">
+                <div class="step-header">
+                    <h2>Select Circular Area</h2>
+                    <p>Drag and resize the circle to choose your area.</p>
+                </div>
+                <div class="crop-editor">
+                    <canvas id="crop-canvas"></canvas>
+                </div>
+                <div class="controls">
+                    <button id="crop-cancel" class="btn secondary">Back</button>
+                    <button id="crop-confirm" class="btn primary">Next</button>
+                </div>
+            </section>
+
+            <!-- Step 3: Settings -->
+            <section id="settings-step" class="step-container hidden">
+                <div class="step-header">
+                    <h2>Configuration</h2>
+                    <p>Adjust the detailed settings for your art.</p>
+                </div>
+
+                <div class="preview-container">
+                    <canvas id="preview-canvas"></canvas>
+                </div>
+
+                <div class="settings-form">
+                    <div class="input-group">
+                        <label for="nails-input">Number of Nails</label>
+                        <input type="number" id="nails-input" value="288" min="100" max="1000">
+                        <span class="help-text">More nails = higher resolution.</span>
+                    </div>
+                    <div class="input-group">
+                        <label for="lines-input">Number of Lines</label>
+                        <input type="number" id="lines-input" value="3000" min="500" max="10000">
+                    </div>
+                    <div class="input-group">
+                        <label for="opacity-input">String Opacity</label>
+                        <input type="range" id="opacity-input" value="0.5" min="0.1" max="1.0" step="0.1">
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button id="settings-back" class="btn secondary">Back</button>
+                    <button id="generate-btn" class="btn primary">Generate Custom</button>
+                    <button id="batch-btn" class="btn primary" style="background: #a855f7;">Generate Kit
+                        Previews</button>
+                </div>
+            </section>
+
+            <!-- Step 4a: Batch Results -->
+            <section id="batch-step" class="step-container hidden">
+                <div class="step-header">
+                    <h2>Select Your Kit</h2>
+                    <p>Choose the size that fits your skill level.</p>
+                </div>
+                <div class="batch-grid" id="batch-grid">
+                    <!-- Items will be injected here -->
+                </div>
+                <div class="controls">
+                    <button id="batch-back-btn" class="btn secondary">Back to Settings</button>
+                </div>
+            </section>
+
+            <!-- Step 4b: Detail/Generation View -->
+            <section id="generation-step" class="step-container hidden">
+                <div class="step-header">
+                    <h2>String Art Viewer</h2>
+                    <p>Adjust properties and download.</p>
+                </div>
+                <div class="canvas-wrapper">
+                    <canvas id="art-canvas"></canvas>
+                </div>
+                <div class="status-bar">
+                    <span id="status-text">Ready</span>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                </div>
+
+                <div class="adjustment-controls" style="margin-top: 1rem; width: 100%; max-width: 300px;">
+                    <label for="result-opacity" style="display: flex; justify-content: space-between;">
+                        <span>String Opacity</span>
+                        <span id="result-opacity-val">0.5</span>
+                    </label>
+                    <input type="range" id="result-opacity" min="0.05" max="1.0" step="0.05" value="0.5"
+                        style="width: 100%;">
+                </div>
+
+                <div class="controls">
+                    <button id="detail-back-btn" class="btn secondary hidden">Back to Grid</button>
+                    <button id="reset-btn" class="btn secondary">Start Over</button>
+                    <button id="save-gallery-btn" class="btn secondary" disabled>Save to Gallery</button>
+                    <button id="download-seq-btn" class="btn secondary" disabled>Download Sequence</button>
+                    <button id="download-btn" class="btn primary" disabled>Download Image</button>
+                </div>
+            </section>
+
+            <!-- Gallery Section -->
+            <section id="gallery-section" class="step-container"
+                style="display: block; opacity: 1; transform: none; margin-top: 2rem;">
+                <div class="step-header">
+                    <h2>Gallery</h2>
+                    <p>Your saved masterpieces.</p>
+                </div>
+                <div id="gallery-grid" class="gallery-grid">
+                    <!-- Gallery items will appear here -->
+                    <p class="empty-gallery-text">No saved art yet.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
