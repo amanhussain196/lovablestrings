@@ -16,10 +16,11 @@ class StringArtGenerator {
                 canvasSize: 400 // Viewport size for cropper
             },
             settings: {
-                nails: 288,
+                nails: 200,
                 lines: 3000,
                 opacity: 0.5
             },
+            frameShape: 'circle',
             // Batch State
             batchQueue: [],
             isBatchMode: false,
@@ -59,6 +60,10 @@ class StringArtGenerator {
         // Crop Controls
         document.getElementById('crop-cancel').addEventListener('click', () => this.goToStep('upload'));
         document.getElementById('crop-confirm').addEventListener('click', () => this.finishCrop());
+
+        // Shape Selectors
+        document.getElementById('shape-circle').addEventListener('click', () => this.setFrameShape('circle'));
+        document.getElementById('shape-square').addEventListener('click', () => this.setFrameShape('square'));
 
         // Settings Controls
         document.getElementById('settings-back').addEventListener('click', () => this.goToStep('crop'));
@@ -134,6 +139,25 @@ class StringArtGenerator {
         if (stepName === 'crop') this.initCropper();
     }
 
+    setFrameShape(shape) {
+        this.state.frameShape = shape;
+        const btnCircle = document.getElementById('shape-circle');
+        const btnSquare = document.getElementById('shape-square');
+
+        if (shape === 'circle') {
+            btnCircle.classList.add('primary');
+            btnCircle.classList.remove('secondary');
+            btnSquare.classList.add('secondary');
+            btnSquare.classList.remove('primary');
+        } else {
+            btnSquare.classList.add('primary');
+            btnSquare.classList.remove('secondary');
+            btnCircle.classList.add('secondary');
+            btnCircle.classList.remove('primary');
+        }
+        this.drawCropper();
+    }
+
     handleFile(file) {
         if (!file.type.startsWith('image/')) {
             alert('Please upload an image file.');
@@ -185,6 +209,33 @@ class StringArtGenerator {
         window.onmouseup = () => {
             this.state.crop.isDragging = false;
         };
+
+        // Touch Events
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 1) return; // Ignore multi-touch
+            e.preventDefault();
+            this.state.crop.isDragging = true;
+            this.state.crop.lastX = e.touches[0].clientX;
+            this.state.crop.lastY = e.touches[0].clientY;
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => {
+            this.state.crop.isDragging = false;
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if (!this.state.crop.isDragging || this.state.currentStep !== 'crop') return;
+            // We don't prevent default on window to strictly avoid interfering with UI, 
+            // but relies on canvas touchstart preventing default to stop initial scroll.
+            const dx = e.touches[0].clientX - this.state.crop.lastX;
+            const dy = e.touches[0].clientY - this.state.crop.lastY;
+            this.state.crop.lastX = e.touches[0].clientX;
+            this.state.crop.lastY = e.touches[0].clientY;
+
+            this.state.crop.x += dx;
+            this.state.crop.y += dy;
+            this.drawCropper();
+        }, { passive: false });
 
         window.onmousemove = (e) => {
             if (!this.state.crop.isDragging || this.state.currentStep !== 'crop') return;
@@ -244,14 +295,26 @@ class StringArtGenerator {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.beginPath();
         ctx.rect(0, 0, width, height);
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2, true); // Cut out
-        ctx.fill();
+
+        if (this.state.frameShape === 'circle') {
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        } else {
+            const s = radius * 2;
+            ctx.rect(cx - radius, cy - radius, s, s);
+        }
+        // Use evenodd to punch hole
+        ctx.fill('evenodd');
 
         // Border
         ctx.strokeStyle = '#38bdf8';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        if (this.state.frameShape === 'circle') {
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        } else {
+            const s = radius * 2;
+            ctx.rect(cx - radius, cy - radius, s, s);
+        }
         ctx.stroke();
     }
 
@@ -293,11 +356,13 @@ class StringArtGenerator {
             0, 0, size, size
         );
 
-        // Apply circular mask (optional, but good for algorithm to ignore outside)
-        ctx.globalCompositeOperation = 'destination-in';
-        ctx.beginPath();
-        ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
-        ctx.fill();
+        // Apply circular mask if needed
+        if (this.state.frameShape === 'circle') {
+            ctx.globalCompositeOperation = 'destination-in';
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
         // Get Pixel Data for Algorithm
         // Convert to grayscale
@@ -324,6 +389,60 @@ class StringArtGenerator {
         this.goToStep('settings');
     }
 
+    getPinPositions(numPins, width, height) {
+        const pins = [];
+        const cx = width / 2;
+        const cy = height / 2;
+
+        if (this.state.frameShape === 'circle') {
+            const radius = (width / 2) - 1;
+            for (let i = 0; i < numPins; i++) {
+                const angle = (2 * Math.PI * i) / numPins;
+                pins.push({
+                    x: cx + radius * Math.cos(angle),
+                    y: cy + radius * Math.sin(angle)
+                });
+            }
+        } else {
+            // Square logic
+            // We use the full width/height (minus 1 px margin for safety)
+            const margin = 1;
+            // Assuming square aspect from cropper
+            const w = width - 2 * margin;
+            const h = height - 2 * margin;
+            const x0 = margin;
+            const y0 = margin;
+
+            const perimeter = 2 * (w + h);
+            const step = perimeter / numPins;
+
+            for (let i = 0; i < numPins; i++) {
+                let d = (i * step) % perimeter;
+                let x, y;
+
+                if (d < w) {
+                    // Top Edge
+                    x = x0 + d;
+                    y = y0;
+                } else if (d < w + h) {
+                    // Right Edge
+                    x = x0 + w;
+                    y = y0 + (d - w);
+                } else if (d < 2 * w + h) {
+                    // Bottom Edge
+                    x = x0 + w - (d - (w + h));
+                    y = y0 + h;
+                } else {
+                    // Left Edge
+                    x = x0;
+                    y = y0 + h - (d - (2 * w + h));
+                }
+                pins.push({ x, y });
+            }
+        }
+        return pins;
+    }
+
     startGeneration() {
         this.goToStep('generation');
         const canvas = document.getElementById('art-canvas');
@@ -347,19 +466,7 @@ class StringArtGenerator {
 
         // Calculate Pin Positions
         const numPins = this.state.settings.nails;
-        const pins = [];
-        const cx = this.state.width / 2;
-        const cy = this.state.height / 2;
-        const radius = (this.state.width / 2) - 1;
-
-        for (let i = 0; i < numPins; i++) {
-            const angle = (2 * Math.PI * i) / numPins;
-            pins.push({
-                x: cx + radius * Math.cos(angle),
-                y: cy + radius * Math.sin(angle)
-            });
-        }
-        this.state.pins = pins;
+        this.state.pins = this.getPinPositions(numPins, this.state.width, this.state.height);
         this.state.sequence = [1]; // Start with first pin
 
         // Begin Algorithm
@@ -373,22 +480,22 @@ class StringArtGenerator {
         // Define Kit Variations
         const variations = [
             {
-                nails: 180,
-                lines: 1400,
-                label: 'Beginner Kit (20cm)',
-                opacity: 0.6
+                nails: 200,
+                lines: 2500,
+                label: 'Light (2500 lines)',
+                opacity: 0.55
             },
             {
-                nails: 240,
-                lines: 2800,
-                label: 'Standard Kit (30cm)',
+                nails: 200,
+                lines: 3000,
+                label: 'Standard (3000 lines)',
                 opacity: 0.45
             },
             {
-                nails: 300,
-                lines: 6000,
-                label: 'Pro Kit (40cm)',
-                opacity: 0.25
+                nails: 200,
+                lines: 3500,
+                label: 'Dense (3500 lines)',
+                opacity: 0.35
             }
         ];
 
@@ -445,19 +552,7 @@ class StringArtGenerator {
 
         // Precompute Pins
         const numPins = job.nails;
-        const pins = [];
-        const cx = this.state.width / 2;
-        const cy = this.state.height / 2;
-        const radius = (this.state.width / 2) - 1;
-
-        for (let i = 0; i < numPins; i++) {
-            const angle = (2 * Math.PI * i) / numPins;
-            pins.push({
-                x: cx + radius * Math.cos(angle),
-                y: cy + radius * Math.sin(angle)
-            });
-        }
-        job.pins = pins;
+        job.pins = this.getPinPositions(numPins, this.state.width, this.state.height);
         job.sequence = [1];
 
         // We use a clone of sourcePixels for each job so errors accumulate per job
@@ -620,7 +715,12 @@ class StringArtGenerator {
 
         const BATCH_SIZE = 10; // Draw mutiple lines per frame for speed
         const ctx = document.getElementById('art-canvas').getContext('2d');
-        const scale = 1000 / this.state.width; // Scale from process space to render space
+
+        // Add Margin for Frame
+        const margin = 50;
+        const availableWidth = 1000 - (margin * 2);
+        const scale = availableWidth / this.state.width;
+        const offset = margin;
 
         ctx.lineWidth = 1;
         ctx.strokeStyle = `rgba(0, 0, 0, ${this.state.settings.opacity})`;
@@ -658,8 +758,8 @@ class StringArtGenerator {
                 const p2 = this.state.pins[bestPin];
 
                 // Draw on canvas
-                ctx.moveTo(p1.x * scale, p1.y * scale);
-                ctx.lineTo(p2.x * scale, p2.y * scale);
+                ctx.moveTo(p1.x * scale + offset, p1.y * scale + offset);
+                ctx.lineTo(p2.x * scale + offset, p2.y * scale + offset);
 
                 // Subtract from error image
                 this.subtractLine(current, bestPin);
@@ -754,9 +854,70 @@ class StringArtGenerator {
     finishGeneration() {
         this.state.isGenerating = false;
         document.getElementById('status-text').innerText = `Finished! ${this.state.settings.lines} lines.`;
+
+        this.drawPinNumbers();
+
         document.getElementById('download-btn').disabled = false;
         document.getElementById('save-gallery-btn').disabled = false;
         document.getElementById('download-seq-btn').disabled = false;
+    }
+
+    drawPinNumbers() {
+        const ctx = document.getElementById('art-canvas').getContext('2d');
+        const margin = 50;
+        const availableWidth = 1000 - (margin * 2);
+        const scale = availableWidth / this.state.width;
+        const offset = margin;
+
+        const pins = this.state.pins;
+        const cx = (this.state.width / 2) * scale + offset;
+        const cy = (this.state.height / 2) * scale + offset;
+
+        // Draw Frame Border
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#000000';
+        ctx.beginPath();
+        if (this.state.frameShape === 'circle') {
+            // Radius of the pins circle in render space
+            const radius = ((this.state.width / 2) - 1) * scale;
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        } else {
+            // Square
+            const w = (this.state.width - 2) * scale;
+            ctx.rect(cx - w / 2, cy - w / 2, w, w);
+        }
+        ctx.stroke();
+
+        ctx.font = 'bold 16px Arial';
+        ctx.fillStyle = '#ff0000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        pins.forEach((pin, i) => {
+            // Mark 1, 20, 40, ...
+            const pinNum = i + 1;
+            if (pinNum === 1 || pinNum % 20 === 0) {
+                // Pin Position in Render Space
+                const px = pin.x * scale + offset;
+                const py = pin.y * scale + offset;
+
+                // Direction from center
+                let dx = px - cx;
+                let dy = py - cy;
+                const len = Math.sqrt(dx * dx + dy * dy);
+                if (len > 0) {
+                    dx /= len;
+                    dy /= len;
+                }
+
+                // Place text slightly outside the pins
+                const textOffset = 20;
+                const textX = px + dx * textOffset;
+                const textY = py + dy * textOffset;
+
+                ctx.fillText(pinNum.toString(), textX, textY);
+            }
+        });
     }
 
     downloadImage() {
@@ -880,7 +1041,12 @@ class StringArtGenerator {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         // Draw properties
-        const scale = 1000 / this.state.width;
+        // Draw properties
+        const margin = 50;
+        const availableWidth = 1000 - (margin * 2);
+        const scale = availableWidth / this.state.width;
+        const offset = margin;
+
         ctx.lineWidth = 1;
         ctx.strokeStyle = `rgba(0, 0, 0, ${this.state.settings.opacity})`;
         ctx.beginPath();
@@ -890,14 +1056,17 @@ class StringArtGenerator {
         if (currentIdx < 0) currentIdx = 0; // safety
 
         const pStart = this.state.pins[currentIdx];
-        if (pStart) ctx.moveTo(pStart.x * scale, pStart.y * scale);
+        if (pStart) ctx.moveTo(pStart.x * scale + offset, pStart.y * scale + offset);
 
         for (let i = 1; i < this.state.sequence.length; i++) {
             const pinIdx = this.state.sequence[i] - 1;
             const p = this.state.pins[pinIdx];
-            if (p) ctx.lineTo(p.x * scale, p.y * scale);
+            if (p) ctx.lineTo(p.x * scale + offset, p.y * scale + offset);
         }
         ctx.stroke();
+
+        // Re-draw numbers
+        this.drawPinNumbers();
     }
 }
 

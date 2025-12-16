@@ -32,8 +32,14 @@
             <!-- Step 2: Crop -->
             <section id="crop-step" class="step-container hidden">
                 <div class="step-header">
-                    <h2>Select Circular Area</h2>
-                    <p>Drag and resize the circle to choose your area.</p>
+                    <h2>Select Area</h2>
+                    <p>Choose your frame shape and crop the image.</p>
+                </div>
+                <!-- Frame Shape Selection -->
+                <div class="shape-selector"
+                    style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 1rem;">
+                    <button id="shape-circle" class="btn primary">Circle Frame</button>
+                    <button id="shape-square" class="btn secondary">Square Frame</button>
                 </div>
                 <div class="crop-editor">
                     <canvas id="crop-canvas"></canvas>
@@ -58,7 +64,7 @@
                 <div class="settings-form">
                     <div class="input-group">
                         <label for="nails-input">Number of Nails</label>
-                        <input type="number" id="nails-input" value="288" min="100" max="1000">
+                        <input type="number" id="nails-input" value="200" min="100" max="1000">
                         <span class="help-text">More nails = higher resolution.</span>
                     </div>
                     <div class="input-group">
