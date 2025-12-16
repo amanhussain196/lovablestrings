@@ -17,8 +17,7 @@ class StringArtGenerator {
             },
             settings: {
                 nails: 200,
-                lines: 3000,
-                opacity: 0.5
+                lines: 3000
             },
             frameShape: 'circle',
             // Batch State
@@ -83,10 +82,7 @@ class StringArtGenerator {
         // Inputs
         document.getElementById('nails-input').addEventListener('change', (e) => this.state.settings.nails = parseInt(e.target.value));
         document.getElementById('lines-input').addEventListener('change', (e) => this.state.settings.lines = parseInt(e.target.value));
-        document.getElementById('opacity-input').addEventListener('input', (e) => {
-            this.state.settings.opacity = parseFloat(e.target.value);
-            // Re-render preview if we were doing a live preview, but for now just update state
-        });
+
 
         // Generation Controls
         document.getElementById('reset-btn').addEventListener('click', () => {
@@ -97,14 +93,8 @@ class StringArtGenerator {
         document.getElementById('save-gallery-btn').addEventListener('click', () => this.saveToGallery());
         document.getElementById('download-seq-btn').addEventListener('click', () => this.downloadSequence());
 
-        // Result Opacity
-        const resOpInput = document.getElementById('result-opacity');
-        resOpInput.addEventListener('input', (e) => {
-            const val = parseFloat(e.target.value);
-            this.state.settings.opacity = val;
-            document.getElementById('result-opacity-val').innerText = val.toFixed(2);
-            this.redrawResult();
-        });
+        // Result Opacity - Removed
+
 
         this.loadGallery();
     }
@@ -194,10 +184,32 @@ class StringArtGenerator {
             canvasSize: size,
             isDragging: false,
             lastX: 0,
-            lastY: 0
+            lastY: 0,
+            isPinching: false,
+            lastPinchDist: 0
         };
 
         this.drawCropper();
+
+        // Zoom Helper
+        const applyZoom = (newScale, center = null) => {
+            if (newScale > 0.1 && newScale < 10) {
+                // Default to center of canvas if no center provided (like for wheel)
+                // Or actually for wheel it computes relative to viewport center.
+
+                // Current center relative to image
+                const cx = (this.state.crop.canvasSize / 2 - this.state.crop.x) / this.state.crop.scale;
+                const cy = (this.state.crop.canvasSize / 2 - this.state.crop.y) / this.state.crop.scale;
+
+                this.state.crop.scale = newScale;
+
+                // New Position
+                this.state.crop.x = this.state.crop.canvasSize / 2 - cx * newScale;
+                this.state.crop.y = this.state.crop.canvasSize / 2 - cy * newScale;
+
+                this.drawCropper();
+            }
+        };
 
         // Mouse Events for Pan/Zoom
         canvas.onmousedown = (e) => {
@@ -212,29 +224,53 @@ class StringArtGenerator {
 
         // Touch Events
         canvas.addEventListener('touchstart', (e) => {
-            if (e.touches.length > 1) return; // Ignore multi-touch
             e.preventDefault();
-            this.state.crop.isDragging = true;
-            this.state.crop.lastX = e.touches[0].clientX;
-            this.state.crop.lastY = e.touches[0].clientY;
+            if (e.touches.length === 2) {
+                // Pinch Start
+                this.state.crop.isPinching = true;
+                this.state.crop.isDragging = false;
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                this.state.crop.lastPinchDist = Math.sqrt(dx * dx + dy * dy);
+            } else if (e.touches.length === 1) {
+                // Drag Start
+                this.state.crop.isDragging = true;
+                this.state.crop.isPinching = false;
+                this.state.crop.lastX = e.touches[0].clientX;
+                this.state.crop.lastY = e.touches[0].clientY;
+            }
         }, { passive: false });
 
-        window.addEventListener('touchend', () => {
-            this.state.crop.isDragging = false;
+        window.addEventListener('touchend', (e) => {
+            if (e.touches.length < 2) this.state.crop.isPinching = false;
+            if (e.touches.length === 0) this.state.crop.isDragging = false;
         });
 
         window.addEventListener('touchmove', (e) => {
-            if (!this.state.crop.isDragging || this.state.currentStep !== 'crop') return;
-            // We don't prevent default on window to strictly avoid interfering with UI, 
-            // but relies on canvas touchstart preventing default to stop initial scroll.
-            const dx = e.touches[0].clientX - this.state.crop.lastX;
-            const dy = e.touches[0].clientY - this.state.crop.lastY;
-            this.state.crop.lastX = e.touches[0].clientX;
-            this.state.crop.lastY = e.touches[0].clientY;
+            if (this.state.currentStep !== 'crop') return;
 
-            this.state.crop.x += dx;
-            this.state.crop.y += dy;
-            this.drawCropper();
+            if (this.state.crop.isPinching && e.touches.length === 2) {
+                e.preventDefault();
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (this.state.crop.lastPinchDist > 0) {
+                    const zoomFactor = dist / this.state.crop.lastPinchDist;
+                    applyZoom(this.state.crop.scale * zoomFactor);
+                }
+                this.state.crop.lastPinchDist = dist;
+            } else if (this.state.crop.isDragging && e.touches.length === 1) {
+                // Dragging
+                const dx = e.touches[0].clientX - this.state.crop.lastX;
+                const dy = e.touches[0].clientY - this.state.crop.lastY;
+                this.state.crop.lastX = e.touches[0].clientX;
+                this.state.crop.lastY = e.touches[0].clientY;
+
+                this.state.crop.x += dx;
+                this.state.crop.y += dy;
+                this.drawCropper();
+            }
         }, { passive: false });
 
         window.onmousemove = (e) => {
@@ -252,21 +288,7 @@ class StringArtGenerator {
         canvas.onwheel = (e) => {
             e.preventDefault();
             const zoomSpeed = 0.001;
-            const newScale = this.state.crop.scale * (1 - e.deltaY * zoomSpeed);
-            if (newScale > 0.1 && newScale < 10) {
-                // Zoom towards center
-                // Current center relative to image
-                const cx = (this.state.crop.canvasSize / 2 - this.state.crop.x) / this.state.crop.scale;
-                const cy = (this.state.crop.canvasSize / 2 - this.state.crop.y) / this.state.crop.scale;
-
-                this.state.crop.scale = newScale;
-
-                // New Position
-                this.state.crop.x = this.state.crop.canvasSize / 2 - cx * newScale;
-                this.state.crop.y = this.state.crop.canvasSize / 2 - cy * newScale;
-
-                this.drawCropper();
-            }
+            applyZoom(this.state.crop.scale * (1 - e.deltaY * zoomSpeed));
         };
     }
 
@@ -453,10 +475,8 @@ class StringArtGenerator {
         canvas.width = 1000;
         canvas.height = 1000;
 
-        // Sync opacity slider
-        const op = this.state.settings.opacity;
-        document.getElementById('result-opacity').value = op;
-        document.getElementById('result-opacity-val').innerText = op.toFixed(2);
+        // Sync opacity - Removed
+
 
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#ffffff';
@@ -482,20 +502,17 @@ class StringArtGenerator {
             {
                 nails: 200,
                 lines: 2500,
-                label: 'Light (2500 lines)',
-                opacity: 0.55
+                label: 'Light (2500 lines)'
             },
             {
                 nails: 200,
                 lines: 3000,
-                label: 'Standard (3000 lines)',
-                opacity: 0.45
+                label: 'Standard (3000 lines)'
             },
             {
                 nails: 200,
                 lines: 3500,
-                label: 'Dense (3500 lines)',
-                opacity: 0.35
+                label: 'Dense (3500 lines)'
             }
         ];
 
@@ -508,7 +525,6 @@ class StringArtGenerator {
                 id: index,
                 nails: v.nails,
                 lines: v.lines,
-                opacity: v.opacity || 0.5, // Default or recommended
                 label: v.label || null,
                 sequence: [],
                 pins: [],
@@ -574,9 +590,8 @@ class StringArtGenerator {
 
         let currentPin = job.sequence[job.sequence.length - 1] - 1;
 
-        // Use job's recommended opacity or default for thumbnail
-        // Thumbnail usually darker to be visible at small size
-        const thumbOpacity = job.opacity ? job.opacity : 0.3;
+        // Use fixed opacity for consistency
+        const thumbOpacity = 0.4;
         ctx.strokeStyle = `rgba(0,0,0,${thumbOpacity})`;
         ctx.lineWidth = 0.5;
         ctx.beginPath();
@@ -687,19 +702,6 @@ class StringArtGenerator {
         this.state.settings.nails = job.nails;
         this.state.settings.lines = job.lines;
 
-        // Apply Recommended Opacity if present
-        if (job.opacity) {
-            this.state.settings.opacity = job.opacity;
-            const resOpInput = document.getElementById('result-opacity');
-            resOpInput.value = job.opacity;
-            document.getElementById('result-opacity-val').innerText = job.opacity.toFixed(2);
-        } else {
-            // Default check
-            this.state.settings.opacity = 0.5;
-            document.getElementById('result-opacity').value = 0.5;
-            document.getElementById('result-opacity-val').innerText = '0.50';
-        }
-
         // Re-render large result
         this.redrawResult();
         const lbl = job.label ? ` (${job.label})` : '';
@@ -744,6 +746,9 @@ class StringArtGenerator {
                 const dist = Math.abs(current - i);
                 if (dist < 5 || dist > this.state.pins.length - 5) continue;
 
+                // getLineScoreGeneric is better as it uses job pixels concept but we can use getLineScore for main
+                // but let's make sure we are not using opacity here for brightness - wait, algorithm needs brightness
+                // opacity only affects drawing.
                 const lineScore = this.getLineScore(current, i);
 
                 if (lineScore > maxDarkness) {
@@ -1048,7 +1053,7 @@ class StringArtGenerator {
         const offset = margin;
 
         ctx.lineWidth = 1;
-        ctx.strokeStyle = `rgba(0, 0, 0, ${this.state.settings.opacity})`;
+        ctx.strokeStyle = `rgba(0, 0, 0, 0.5)`; // Fixed constant
         ctx.beginPath();
 
         // Reconstruct path
