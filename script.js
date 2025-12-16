@@ -706,6 +706,10 @@ class StringArtGenerator {
         this.redrawResult();
         const lbl = job.label ? ` (${job.label})` : '';
         document.getElementById('status-text').innerText = `Viewing: ${job.nails} nails, ${job.lines} lines${lbl}`;
+
+        document.getElementById('download-btn').disabled = false;
+        document.getElementById('save-gallery-btn').disabled = false;
+        document.getElementById('download-seq-btn').disabled = false;
     }
 
     generateStep(currentPinIndex, linesDrawn) {
@@ -725,7 +729,7 @@ class StringArtGenerator {
         const offset = margin;
 
         ctx.lineWidth = 1;
-        ctx.strokeStyle = `rgba(0, 0, 0, ${this.state.settings.opacity})`;
+        ctx.strokeStyle = `rgba(0, 0, 0, 0.5)`; // Fixed constant
         ctx.beginPath();
         let current = currentPinIndex;
 

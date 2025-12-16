@@ -385,3 +385,23 @@ input[type="number"]:focus {
     display: block;
     margin-top: 0.2rem;
 }
+
+/* Mobile Specific */
+@media screen and (max-width: 600px) {
+    .app-container {
+        transform: scale(0.5);
+        transform-origin: top center;
+        width: 200%;
+        /* Compensate for scale down to keep full width */
+        max-width: none;
+        height: 200%;
+        margin-bottom: -50%;
+        /* Adjust whitespace */
+    }
+
+    body {
+        align-items: flex-start;
+        /* Start from top on mobile */
+        overflow-x: hidden;
+    }
+}
